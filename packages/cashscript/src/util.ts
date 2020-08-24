@@ -86,12 +86,12 @@ export function calculateBytesize(script: Script): number {
 // ////////// BUILD OBJECTS ///////////////////////////////////////////////////
 export function createInputScript(
   redeemScript: Script,
-  encodedParameters: Uint8Array[],
+  encodedArgs: Uint8Array[],
   selector?: number,
   preimage?: Uint8Array,
 ): Uint8Array {
   // Create unlock script / redeemScriptSig (add potential preimage and selector)
-  const unlockScript = encodedParameters.reverse();
+  const unlockScript = encodedArgs.reverse();
   if (preimage !== undefined) unlockScript.push(preimage);
   if (selector !== undefined) unlockScript.push(Data.encodeInt(selector));
 

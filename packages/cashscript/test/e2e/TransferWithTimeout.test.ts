@@ -22,7 +22,7 @@ describe('TransferWithTimeout', () => {
   });
 
   describe('send', () => {
-    it('should fail when using incorrect function parameters', async () => {
+    it('should fail when using incorrect function arguments', async () => {
       // given
       const to = twtInstancePast.address;
       const amount = 10000;
@@ -70,7 +70,7 @@ describe('TransferWithTimeout', () => {
       await expectPromise.rejects.toThrow(Reason.UNSATISFIED_LOCKTIME);
     });
 
-    it('should succeed when using correct function parameters', async () => {
+    it('should succeed when using correct function arguments', async () => {
       // given
       const toFuture = twtInstanceFuture.address;
       const toPast = twtInstancePast.address;

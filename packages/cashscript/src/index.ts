@@ -1,6 +1,6 @@
 export { Contract } from './Contract';
 export { Transaction } from './Transaction';
-export { Parameter } from './Parameter';
+export { Argument } from './Argument';
 export { default as SignatureTemplate } from './SignatureTemplate';
 export {
   Artifacts,

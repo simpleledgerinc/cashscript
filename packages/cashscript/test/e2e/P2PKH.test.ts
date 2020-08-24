@@ -23,7 +23,7 @@ describe('P2PKH', () => {
   });
 
   describe('send', () => {
-    it('should fail when using incorrect function parameters', async () => {
+    it('should fail when using incorrect function arguments', async () => {
       // given
       const to = p2pkhInstance.address;
       const amount = 10000;
@@ -41,7 +41,7 @@ describe('P2PKH', () => {
       await expectPromise.rejects.toThrow(Reason.SIG_NULLFAIL);
     });
 
-    it('should succeed when using correct function parameters', async () => {
+    it('should succeed when using correct function arguments', async () => {
       // given
       const to = p2pkhInstance.address;
       const amount = 10000;
