@@ -4,9 +4,10 @@ import {
   Contract,
   SignatureTemplate,
   ElectrumNetworkProvider,
-  Artifact,
+  CashCompiler,
+  Utxo,
 } from 'cashscript';
-import { readFileSync } from 'fs';
+import path from 'path';
 
 run();
 async function run(): Promise<void> {
@@ -28,7 +29,7 @@ async function run(): Promise<void> {
   console.log('p2pkh address:', aliceP2pkh);
 
   // Read the SLP Vault contract to an artifact object
-  const artifact = JSON.parse(Buffer.from(readFileSync('./slp_vault.artifact')).toString("utf8")) as Artifact;
+  const artifact = CashCompiler.compileFile(path.join(__dirname, 'slp_vault.cash'));
 
   // Initialise a network provider for network operations on TESTNET
   const provider = new ElectrumNetworkProvider('testnet');
@@ -41,8 +42,11 @@ async function run(): Promise<void> {
   console.log('contract address:', contract.address);
   console.log('contract balance:', await contract.getBalance());
 
-  const p2pkhCoins = (await provider.getUtxos(aliceP2pkh)).sort((a, b) => a.satoshis - b.satoshis);
-  console.log(`spending ${p2pkhCoins[0]} sats`);
+  const p2pkhCoins = (await provider.getUtxos(aliceP2pkh))
+                      .sort((a, b) => a.satoshis - b.satoshis)
+                      .filter((a, b) => a.satoshis > 1000);
+
+  console.log(`spending ${p2pkhCoins[0].satoshis} sats`);
   const p2shCoins = await provider.getUtxos(contract.address);
 
   const tokenID = Buffer.from("3c346636ec989568854d4d74e6352a756702962c5facaec75cb51f32fb5dde91", "hex");
@@ -66,12 +70,4 @@ async function run(): Promise<void> {
 
   console.log('transaction details:', stringify(tx));
 
-  // // Call the spend() function with alice's signature + pk
-  // // And use it to send two outputs of 0. 000 150 00 BCH back to the contract's address
-  // const tx2 = await contract.functions
-  //   .sweep(alicePk, new SignatureTemplate(alice))
-  //   .to(aliceP2pkh, 1000)
-  //   .send();
-
-  // console.log('transaction details:', stringify(tx2));
 }
