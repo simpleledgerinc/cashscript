@@ -11,6 +11,7 @@
     "bitbox-sdk": "^8.11.1",
     "bitcoincashjs-lib": "Bitcoin-com/bitcoincashjs-lib#v4.0.1",
     "cashscript": "^0.5.0",
+    "slp-mdm": "0.0.6",
     "typescript": "^3.6.4"
   }
 }
