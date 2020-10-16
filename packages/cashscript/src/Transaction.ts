@@ -99,6 +99,44 @@ export class Transaction {
     return this;
   }
 
+  toSlp(tokenID: Buffer|string, version: number, receivers: { to: string, amount: bigint}[], from: Utxo[]): this {
+
+    // checks
+    if (version > 255) {
+      throw Error("slp version larger than 255 is not currently supported");
+    }
+    if (tokenID.length != 32) {
+      throw Error("slp token id is incorrect size");
+    }
+
+    // add specific inputs
+    this.from(from);
+
+    // build the slp op_return message
+    const ver = Buffer.alloc(1);
+    ver.writeUInt8(version, 0);
+    const amts = Buffer.alloc(receivers.length + 8*receivers.length);
+    receivers.forEach((rec, i) => { 
+      amts.write("08", 9 * i, "hex");
+      amts.writeBigUInt64BE(rec.amount, (9 * i + 1));
+    });
+    const slpMsg = Buffer.from(`6a04534c500001${ver}0453454e4420${tokenID}${amts}`, 'hex');
+    
+    // add the slp op_return message
+    this.outputs.unshift({ to: slpMsg, amount: 0 });
+
+    if (this.outputs.length != 1) {
+      throw Error("cannot add other outputs before using slpSend()");
+    }
+
+    // add the receiver dust outputs
+    receivers.forEach((r, _) => {
+      this.to(r.to, 546);
+    });
+
+    return this;
+  }
+
   withOpReturn(chunks: string[]): this {
     this.outputs.push(createOpReturnOutput(chunks));
     return this;

@@ -1,0 +1,91 @@
+pragma cashscript ^0.5.0;
+
+// SlpVault 1.0
+// -----
+// 
+// The purpose of this contract is to avoid accidentally burning of SLP tokens when 
+// sending tokens to p2pkh addresses belonging to users who are not using an SLP compatible
+// wallet. Non-SLP wallets will accidentally burn SLP tokens so we normally need a compatibility
+// signal before sending.  This signal is normally in the form of use of the "simpleledger:"
+// address encoding format.
+//
+// This contract provides a safe way to send any p2pkh address SLP tokens without the need
+// for such a wallet compatibility signals before sending.  Any SLP wallet can be updated to check
+// the balances of their SLP Vault address for each respective p2pkh address.  If any balances are
+// found on the SLP Vault address, the private key for the p2pkh address can be used to sweep
+// the vault into the user's wallet.
+//
+// Block explorers can be updated to display SLP Vault token balances after a user enters
+// a P2PKH type address. The block explorers can also inform users with instructions on which wallets
+// can provide access to the SLP Vault balance so they can sweep the tokens to a normal SLP wallet.
+//
+// The other major benefit this contract provides the ability for senders to recover tokens after
+// sending for any reason, such as user inactivity.
+//
+contract SlpVault(bytes20 pkh) {
+    // Sweep
+    // -----
+    // Spend funds from slp vault
+    //
+    // outputs        - transaction hashOutputs preimage
+    //
+    // pubkey         - the pubkey of the pkh for this vault
+    //
+    // sig            - a signature from above pubkey for this txn
+    //
+    function sweep(bytes outputs, pubkey pk, sig s) {
+
+        require(tx.hashOutputs == hash256(outputs));
+
+        // check if input value is 546 satoshis, indicating possible SLP
+        if (int(tx.value.split(4)[0]) == 546) {
+            require(outputs.split(8)[0] == 0x0000000000000000);
+            bytes p2pkh = new OutputP2PKH(tx.value, pkh);
+            require(outputs.split(outputs.length-p2pkh.length)[1] == p2pkh);
+        }
+
+        // p2pkh check
+        require(hash160(pk) == pkh);
+        require(checkSig(s, pk));
+    }
+
+    // Revoke 
+    // -----
+    // retrieves a coin at any time before the slp vault owner sweeps the coin
+    //
+    // slpScript    - slp op_return script for sending SLP tokens, use 0x00 for BCH only
+    //
+    // value        - the amount of of this coin to pay to the output, the coin can self-pay if value < tx.value
+    //
+    // prevTxn0     - the front part of previous transaction
+    //
+    // prevTxn1_pk  - the public key, middle part of the previous transaction's signatures
+    //
+    // prevTxn2     - the back part of the previous transaction
+    //
+    // sig          - a signature from above pubkey needed for spending this coin
+    //
+    function revoke(bytes slpScript, bytes8 value, bytes prevTxn0, bytes prevTxn1_pk, bytes prevTxn2, sig s) {
+
+        // check the txid matches in preimage tx.hashPrevouts
+        bytes32 txid = hash256(prevTxn0 + prevTxn1_pk + prevTxn2);
+        require(tx.outpoint.split(32)[0] == txid);
+
+        // hash160 for p2pkh receiver
+        bytes20 h160 = hash160(prevTxn1_pk);
+
+        // build p2pkh for case where other inputs are paying for this txn fees.
+        bytes p2pkh = new OutputP2PKH(value, h160);
+
+        // check txn outputs form
+        if (slpScript != 0x00) {
+            require(tx.hashOutputs == hash256(0x0000000000000000 + bytes(slpScript.length) + slpScript + p2pkh));
+        } else {
+            require(tx.hashOutputs == hash256(p2pkh));
+        }
+
+        // Covenant verification is automatically handled by CashScript.
+        // By including this signature check, we gain access to all `tx.<...>` preimage fields.
+        require(checkSig(s, pubkey(prevTxn1_pk)));
+    }
+}
