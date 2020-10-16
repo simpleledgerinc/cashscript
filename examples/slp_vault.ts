@@ -46,7 +46,7 @@ async function run(): Promise<void> {
                       .sort((a, b) => a.satoshis - b.satoshis)
                       .filter((a, b) => a.satoshis > 1000);
 
-  console.log(`spending ${p2pkhCoins[0].satoshis} sats`);
+  console.log(`p2pkh input used for fee: ${p2pkhCoins[0].satoshis} sats`);
   const p2shCoins = await provider.getUtxos(contract.address);
 
   const tokenID = Buffer.from("3c346636ec989568854d4d74e6352a756702962c5facaec75cb51f32fb5dde91", "hex");
