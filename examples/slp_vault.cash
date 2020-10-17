@@ -71,11 +71,8 @@ contract SlpVault(bytes20 pkh) {
         bytes32 txid = hash256(prevTxn0 + prevTxn1_pk + prevTxn2);
         require(tx.outpoint.split(32)[0] == txid);
 
-        // hash160 for p2pkh receiver
-        bytes20 h160 = hash160(prevTxn1_pk);
-
         // build p2pkh for case where other inputs are paying for this txn fees.
-        bytes p2pkh = new OutputP2PKH(value, h160);
+        bytes p2pkh = new OutputP2PKH(value, hash160(prevTxn1_pk));
 
         // check txn outputs form
         if (slpScript != 0x00) {
