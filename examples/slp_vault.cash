@@ -10,7 +10,7 @@ pragma cashscript ^0.5.0;
 // address encoding format.
 //
 // This contract provides a safe way to send any p2pkh address SLP tokens without the need
-// for such a wallet compatibility signals before sending.  Any SLP wallet can be updated to check
+// for such a wallet compatibility signal before sending.  Any SLP wallet can be updated to check
 // the balances of their SLP Vault address for each respective p2pkh address.  If any balances are
 // found on the SLP Vault address, the private key for the p2pkh address can be used to sweep
 // the vault into the user's wallet.
@@ -20,7 +20,11 @@ pragma cashscript ^0.5.0;
 // can provide access to the SLP Vault balance so they can sweep the tokens to a normal SLP wallet.
 //
 // The other major benefit this contract provides the ability for senders to recover tokens after
-// sending for any reason, such as user inactivity.
+// sending at any time until the receiver has moved the coin.  To perform a revoke, the original 
+// sender needs to include the original sending transaction in three chunks.  The middle chunk should
+// represent the public key of the p2pkh address the coin should be sent to.  The revoke feature will
+// not work if the original send transaction is larger than 520 bytes due to the script stack item
+// size limitation.
 //
 contract SlpVault(bytes20 pkh) {
     // Sweep
