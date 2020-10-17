@@ -27,11 +27,11 @@ contract SlpVault(bytes20 pkh) {
     // -----
     // Spend funds from slp vault
     //
-    // outputs        - transaction hashOutputs preimage
+    // outputs  - transaction hashOutputs preimage
     //
-    // pubkey         - the pubkey of the pkh for this vault
+    // pubkey   - the pubkey of the pkh for this vault
     //
-    // sig            - a signature from above pubkey for this txn
+    // sig      - a signature from above pubkey for this txn
     //
     function sweep(bytes outputs, pubkey pk, sig s) {
 
@@ -53,9 +53,7 @@ contract SlpVault(bytes20 pkh) {
     // -----
     // retrieves a coin at any time before the slp vault owner sweeps the coin
     //
-    // slpScript    - slp op_return script for sending SLP tokens, use 0x00 for BCH only
-    //
-    // value        - the amount of of this coin to pay to the output, the coin can self-pay if value < tx.value
+    // outputs      - transaction hashOutputs preimage
     //
     // prevTxn0     - the front part of previous transaction
     //
@@ -65,20 +63,19 @@ contract SlpVault(bytes20 pkh) {
     //
     // sig          - a signature from above pubkey needed for spending this coin
     //
-    function revoke(bytes slpScript, bytes8 value, bytes prevTxn0, bytes prevTxn1_pk, bytes prevTxn2, sig s) {
+    function revoke(bytes outputs, bytes prevTxn0, bytes prevTxn1_pk, bytes prevTxn2, sig s) {
 
         // check the txid matches in preimage tx.hashPrevouts
         bytes32 txid = hash256(prevTxn0 + prevTxn1_pk + prevTxn2);
         require(tx.outpoint.split(32)[0] == txid);
 
-        // build p2pkh for case where other inputs are paying for this txn fees.
-        bytes p2pkh = new OutputP2PKH(value, hash160(prevTxn1_pk));
+        require(tx.hashOutputs == hash256(outputs));
 
-        // check txn outputs form
-        if (slpScript != 0x00) {
-            require(tx.hashOutputs == hash256(0x0000000000000000 + bytes(slpScript.length) + slpScript + p2pkh));
-        } else {
-            require(tx.hashOutputs == hash256(p2pkh));
+        // check if input value is 546 satoshis, indicating possible SLP
+        if (int(tx.value.split(4)[0]) == 546) {
+            require(outputs.split(8)[0] == 0x0000000000000000);
+            bytes p2pkh = new OutputP2PKH(tx.value, hash160(prevTxn1_pk));
+            require(outputs.split(outputs.length-p2pkh.length)[1] == p2pkh);
         }
 
         // Covenant verification is automatically handled by CashScript.
