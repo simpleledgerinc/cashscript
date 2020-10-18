@@ -51,7 +51,7 @@ contract SlpVault(bytes20 pkh) {
         require(tx.hashOutputs == hash256(outputs));
 
         // check if input value is 546 satoshis, indicating possible SLP
-        if (int(tx.value.split(4)[0]) == 546) {
+        if (int(tx.value.split(4)[0]) <= 546) {
             require(outputs.split(8)[0] == 0x0000000000000000);
             bytes p2pkh = new OutputP2PKH(tx.value, pkh);
             require(outputs.split(outputs.length-p2pkh.length)[1] == p2pkh);
@@ -78,21 +78,20 @@ contract SlpVault(bytes20 pkh) {
     //
     function revoke(bytes outputs, bytes prevTxn0, bytes prevTxn1_pk, bytes prevTxn2, sig s) {
 
-        // check the txid matches in preimage tx.hashPrevouts
-        bytes32 txid = hash256(prevTxn0 + prevTxn1_pk + prevTxn2);
-        require(tx.outpoint.split(32)[0] == txid);
-
         require(tx.hashOutputs == hash256(outputs));
 
         // check if input value is 546 satoshis, indicating possible SLP
-        if (int(tx.value.split(4)[0]) == 546) {
+        if (int(tx.value.split(4)[0]) <= 546) {
             require(outputs.split(8)[0] == 0x0000000000000000);
             bytes p2pkh = new OutputP2PKH(tx.value, hash160(prevTxn1_pk));
             require(outputs.split(outputs.length-p2pkh.length)[1] == p2pkh);
         }
 
-        // Covenant verification is automatically handled by CashScript.
-        // By including this signature check, we gain access to all `tx.<...>` preimage fields.
+        // check the txid matches outpoint txid
+        bytes32 txid = hash256(prevTxn0 + prevTxn1_pk + prevTxn2);
+        require(tx.outpoint.split(32)[0] == txid);
+
+        // sig check, accept any pubkey within the original transaction
         require(checkSig(s, pubkey(prevTxn1_pk)));
     }
 }
