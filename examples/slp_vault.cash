@@ -46,15 +46,20 @@ contract SlpVault(bytes20 pkh) {
     // sig      - a signature from above pubkey for this txn
     //
     function sweep(bytes outputs, pubkey pk, sig s) {
-DO NOT COMPILE, SEE COMMENTS ABOVE
+//DO NOT COMPILE, SEE COMMENTS ABOVE
 
-        // check if input value is 546 satoshis, indicating possible SLP, require some OP_RETURN
+        require(tx.hashOutputs == hash256(outputs));
+
+        // check if input value is 546 satoshis, indicating possible SLP, require some op_return
         if (int(tx.value.split(4)[0]) <= 546) {
-            require(tx.hashOutputs == hash256(outputs));
             require(outputs.split(8)[0] == 0x0000000000000000);
         }
 
-        // p2pkh check
+        // check for output to any p2pkh, 
+        // this helps prevent accidental send to single op_return output
+        require(outputs.split(outputs.length - 2)[1] == 0x88ac);
+
+        // check for the p2pkh owner
         require(hash160(pk) == pkh);
         require(checkSig(s, pk));
     }
