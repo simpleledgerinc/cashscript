@@ -1,5 +1,4 @@
 pragma cashscript 0.5.3;
-// DO NOT CHANGE VERSION
 
 // SlpVault 1.0
 // -----
@@ -47,14 +46,12 @@ contract SlpVault(bytes20 pkh) {
     // sig      - a signature from above pubkey for this txn
     //
     function sweep(bytes outputs, pubkey pk, sig s) {
+DO NOT COMPILE, SEE COMMENTS ABOVE
 
-        require(tx.hashOutputs == hash256(outputs));
-
-        // check if input value is 546 satoshis, indicating possible SLP
+        // check if input value is 546 satoshis, indicating possible SLP, require some OP_RETURN
         if (int(tx.value.split(4)[0]) <= 546) {
+            require(tx.hashOutputs == hash256(outputs));
             require(outputs.split(8)[0] == 0x0000000000000000);
-            bytes p2pkh = new OutputP2PKH(tx.value, pkh);
-            require(outputs.split(outputs.length-p2pkh.length)[1] == p2pkh);
         }
 
         // p2pkh check
@@ -78,13 +75,10 @@ contract SlpVault(bytes20 pkh) {
     //
     function revoke(bytes outputs, bytes prevTxn0, bytes prevTxn1_pk, bytes prevTxn2, sig s) {
 
-        require(tx.hashOutputs == hash256(outputs));
-
-        // check if input value is 546 satoshis, indicating possible SLP
+        // check if input value is 546 satoshis, indicating possible SLP, require some OP_RETURN
         if (int(tx.value.split(4)[0]) <= 546) {
+            require(tx.hashOutputs == hash256(outputs));
             require(outputs.split(8)[0] == 0x0000000000000000);
-            bytes p2pkh = new OutputP2PKH(tx.value, hash160(prevTxn1_pk));
-            require(outputs.split(outputs.length-p2pkh.length)[1] == p2pkh);
         }
 
         // check the txid matches outpoint txid
@@ -95,5 +89,3 @@ contract SlpVault(bytes20 pkh) {
         require(checkSig(s, pubkey(prevTxn1_pk)));
     }
 }
-
-DO NOT COMPILE, SEE COMMENTS ABOVE
