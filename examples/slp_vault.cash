@@ -46,7 +46,7 @@ contract SlpVault(bytes20 pkh) {
     // sig      - a signature from above pubkey for this txn
     //
     function sweep(bytes outputs, pubkey pk, sig s) {
-//DO NOT COMPILE, SEE COMMENTS ABOVE
+DO NOT COMPILE, SEE COMMENTS ABOVE
 
         require(tx.hashOutputs == hash256(outputs));
 
