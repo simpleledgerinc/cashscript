@@ -1,0 +1,122 @@
+pragma cashscript 0.5.3;
+
+// ****************************************************************************************************
+// SlpDollar v0.1
+// ****************************************************************************************************
+// 
+// This contract demonstrates how to securely implement a permissioned digital dollar
+// using the Simple Ledger Protocol (SLP).  Extremely low transaction fees and fast confirmation times
+// make SLP an effective and efficient platform for building your Central Bank Digital Currency (CBDC).
+//
+// CBDC issuers only have the ability to freeze coins based on prior transaction history. 
+// We assume the CBDC issuer does not desire to sign any other details associated with the transaction 
+// to maintain the spirit of freedom to users and to also to maintain legal separation from the
+// nature of each transaction. CBDC issuers would automate this signing process with a server
+// to check the user's submitted transaction inputs against their list of blacklisted (frozen) coins. 
+//
+// The issuer is able to build in basic restrictions such as limiting the number of outputs,
+// inclusion of a transaction fee or tax paid to the issuer, and other general limitations to the
+// structure of the transaction.  In this contract we demonstrate how to require a %1 token tax to the
+// CBDC issuer with an output count that is restricted to two (2) outputs.
+//
+// Having a CBDC issuer signature also provides an opportunity to allow the authority to validate the SLP
+// transaction before broadcasting.  This type of validation solves the problem where SLP tokens that are
+// only signed by the user's wallet can result in an accidental token burn because of a bug in the
+// wallet code or by a malfunctioning trusted validator.  SLP also provides the issuer with burn history
+// so that issuers can manually process replacement of burned tokens users affected by wallet software bugs.
+//
+// Methods include (See each method description below for more detail):
+//
+//      - "send",
+//      - "upgrade", and
+//      - "burn"
+//
+// Constructor Inputs:
+//
+//      - pkh: the coin owner's public key hash
+//      - issuerPk: the CBDC issuer's public key
+//
+// ****************************************************************************************************
+//
+contract SlpDollar(bytes20 pkh, bytes33 issuerPk) {
+
+    // *******************************************************
+    // Send
+    // *******************************************************
+    // Spend funds from slp vault
+    //
+    // outputs  - transaction hashOutputs preimage
+    // pubkey   - the pubkey of the pkh for this vault
+    // sig      - a signature from above pubkey for this txn
+    //
+    // *******************************************************
+    //
+    function send(bytes outputs, sig issuerSig, pubkey pk, sig s) {
+
+        int SLP_SEND_CMD_LEN = 55
+        int SEND_LEN_1 = SEND_FRONT_LEN + 9*2
+        int SEND_LEN_2 = SEND_FRONT_LEN + 9*3
+        int P2SH_LEN = 32
+        int OPRETURN_P2SH_LEN_1 = OPRETURN_LEN_1 + P2SH_LEN
+        int OPRETURN_P2SH_LEN_2 = OPRETURN_LEN_2 + P2SH_LEN
+
+        # issuer provides signature for this coin if it is not frozen
+        checkDataSig(issuerSig, tx.outpoint, issuerPk)
+
+        # check outputs preimage matches transaction preimage
+        require(hash256(outputs) == tx.hashOutputs)
+
+        # limit to 1 or 2 SLP token outputs (the tax output burns tokens)
+        if (outputs.length > OPRETURN_P2SH_LEN_1) {
+            require(outputs.length == OPRETURN_P2SH_LEN_2)
+        } else {
+            require(outputs.length == OPRETURN_P2SH_LEN_1)
+        }
+
+        # 1% tax calc
+        if (outputs.length > OPRETURN_P2SH_LEN_1) {
+            // todo
+        } else {
+            bytes op_return = outputs.split(SEND_LEN_1)[1].split(9)[0]
+            bytes spent = op_return.split(8)
+            require(spent.split(4)[0] == bytes4(0))
+            bytes tax = reverse(bytes4(int(bytes4(reverse(spent.split(4)[1]))) / 100))
+            require(hash256(op_return + tax) == tx.hashOutputs)
+        }
+
+        # check p2pkh
+        require(hash160(pubkey) == pkh)
+        checkSig(s, pk)
+    }
+
+    // *******************************************************
+    // Upgrade
+    // *******************************************************
+    //
+    // 
+    // *******************************************************
+    //
+    function upgrade() {
+
+    }
+
+    // *******************************************************
+    // Burn
+    // *******************************************************
+    //
+    // This provides the dollar owner the ability to destroy
+    // the token associated with this coin without the approval
+    // from the issuer.  This function may prove useful in
+    // situations where the issuer has lost its ability to
+    // authorize sends 
+    //
+    // A dust payment is sent to the issuer as a notification
+    // of burning.  This will allow the issuer to replace the
+    // burned coins in an automated way.
+    //
+    // *******************************************************
+    //
+    function burn() {
+
+    }
+}
