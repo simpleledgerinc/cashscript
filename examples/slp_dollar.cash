@@ -6,30 +6,33 @@ pragma cashscript 0.5.3;
 // 
 // This contract demonstrates how to securely implement a permissioned digital dollar
 // using the Simple Ledger Protocol (SLP).  Extremely low transaction fees and fast confirmation times
-// make SLP an effective and efficient platform for building your Central Bank Digital Currency (CBDC).
+// make SLP an effective and efficient platform for building a Central Bank Digital Currency (CBDC).
 //
-// CBDC issuers only have the ability to freeze coins based on prior transaction history. 
+// CBDC issuers are provided the ability to freeze coins based on prior transaction history. 
 // We assume the CBDC issuer does not desire to sign any other details associated with the transaction 
-// to maintain the spirit of freedom to users and to also to maintain legal separation from the
-// nature of each transaction. CBDC issuers would automate this signing process with a server
+// to maintain the spirit of freedom for its users and to also to maintain legal separation from the
+// detailed nature of each transaction. CBDC issuers would automate this signing process with a server
 // to check the user's submitted transaction inputs against their list of blacklisted (frozen) coins. 
 //
 // The issuer is able to build in basic restrictions such as limiting the number of outputs,
 // inclusion of a transaction fee or tax paid to the issuer, and other general limitations to the
-// structure of the transaction.  In this contract we demonstrate how to require a %1 token tax to the
-// CBDC issuer with an output count that is restricted to two (2) outputs.
+// structure of the transaction.  In this contract we demonstrate how to require a %0.1 token tax to the
+// CBDC issuer and an output receiver count that is restricted to two (2) outputs.  These type of 
+// transaction structure restrictions drastically reduces the ability for tokens to be used in
+// mixing protocols and services.
 //
-// Having a CBDC issuer signature also provides an opportunity to allow the authority to validate the SLP
-// transaction before broadcasting.  This type of validation solves the problem where SLP tokens that are
-// only signed by the user's wallet can result in an accidental token burn because of a bug in the
-// wallet code or by a malfunctioning trusted validator.  SLP also provides the issuer with burn history
-// so that issuers can manually process replacement of burned tokens users affected by wallet software bugs.
+// Interaction with the CBDC issuer signature also provides an opportunity to allow the authority to
+// validate the SLP transaction before broadcasting.  This type of validation solves the problem where
+// SLP tokens that are only signed by the user's wallet can result in an accidental token burn because
+// of a bug in the wallet code or by a malfunctioning trusted validator.  SLP also provides the issuer
+// with burn history so that issuers can manually process replacement of burned tokens users affected
+// by wallet software bugs.
 //
 // Methods include (See each method description below for more detail):
 //
-//      - "send",
-//      - "upgrade", and
-//      - "burn"
+//      - send(): allows the digital dollar owner to spend,
+//      - revokeSig(): allows CBDC issuer to invalidate a previously issued signature,
+//      - upgrade(): allows CBDC issuer to upgrade to a new contract version,
 //
 // Constructor Inputs:
 //
@@ -38,85 +41,90 @@ pragma cashscript 0.5.3;
 //
 // ****************************************************************************************************
 //
-contract SlpDollar(bytes20 pkh, bytes33 issuerPk) {
+contract SlpDollar(bytes20 pkh, pubkey issuerPk, bytes32 tokenId) {
 
     // *******************************************************
     // Send
     // *******************************************************
     // Spend funds from slp vault
     //
-    // outputs  - transaction hashOutputs preimage
-    // pubkey   - the pubkey of the pkh for this vault
-    // sig      - a signature from above pubkey for this txn
+    //  - amtPay: Payment digital dollar amount for txn output 1
+    //  - pkPay: Payment public for txn output 1
+    //  - amtChange: Change digital dollar amount for txn output 2
+    //  - amtTax: Tax amount to 
+    //  - issuerSig: CBDC issuer's signature for this outpoint
+    //  - pubkey: the pubkey of the pkh for this coin
+    //  - sig: a signature from above pubkey for this coin
     //
     // *******************************************************
     //
-    function send(bytes outputs, sig issuerSig, pubkey pk, sig s) {
+    function send(bytes8 amtPay, bytes33 pkPay, bytes8 amtChange, bytes8 amtTax, datasig issuerSig, pubkey pk, sig s) {
+    
+        // CBDC issuer provides a signature unique for this coin to acknowledge that it is not frozen.
+        // The CBDC can invalidate this signature using the "revokeSig" function.
+        require(checkDataSig(issuerSig, tx.outpoint, issuerPk));
 
-        int SLP_SEND_CMD_LEN = 55
-        int SEND_LEN_1 = SEND_FRONT_LEN + 9*2
-        int SEND_LEN_2 = SEND_FRONT_LEN + 9*3
-        int P2SH_LEN = 32
-        int OPRETURN_P2SH_LEN_1 = OPRETURN_LEN_1 + P2SH_LEN
-        int OPRETURN_P2SH_LEN_2 = OPRETURN_LEN_2 + P2SH_LEN
-
-        # issuer provides signature for this coin if it is not frozen
-        checkDataSig(issuerSig, tx.outpoint, issuerPk)
-
-        # check outputs preimage matches transaction preimage
-        require(hash256(outputs) == tx.hashOutputs)
-
-        # limit to 1 or 2 SLP token outputs (the tax output burns tokens)
-        if (outputs.length > OPRETURN_P2SH_LEN_1) {
-            require(outputs.length == OPRETURN_P2SH_LEN_2)
+        // 0.1% payment tax calculation with a $0.01 minimum and $16,777.00 maximum
+        //?require(amtPay.length == 8);
+        //?require(amtChange.length == 8);
+        //?require(amtTax.length == 8);
+        if (amtPay.split(5)[0] != 0x0000000000) {
+            // max payment tax = $16,777
+            require(amtTax == 0x0000000000028F5A);
+        } else if (int(bytes3(amtPay.split(5)[1].reverse())) / 1000 < 1) {
+            // min tax = $0.01 (this will execute for payments up to $10)
+            require(amtTax == 0x0000000000000001);
         } else {
-            require(outputs.length == OPRETURN_P2SH_LEN_1)
+            // calc %0.1 tax
+            require(amtTax == 0x0000000000 + bytes3(int(bytes3(amtPay.split(5)[1].reverse())) / 1000));
         }
 
-        # 1% tax calc
-        if (outputs.length > OPRETURN_P2SH_LEN_1) {
-            // todo
-        } else {
-            bytes op_return = outputs.split(SEND_LEN_1)[1].split(9)[0]
-            bytes spent = op_return.split(8)
-            require(spent.split(4)[0] == bytes4(0))
-            bytes tax = reverse(bytes4(int(bytes4(reverse(spent.split(4)[1]))) / 100))
-            require(hash256(op_return + tax) == tx.hashOutputs)
-        }
+        // check output format requirements (payment receiver + change address + tax payment receiver + dust notifier for payment receiver)
+        require(pkPay.length == 33);
+        bytes code = tx.bytecode.split(21)[1];
+        bytes8 dust = 0x2202000000000000;
+        bytes p2shPay = new OutputP2SH(dust, hash160(0x14 + hash160(pkPay) + code));
+        bytes p2shChange = new OutputP2SH(dust, hash160(tx.bytecode));
+        bytes p2shTax = new OutputP2SH(dust, hash160(0x14 + bytes(issuerPk) + code));
+        bytes dustPay = new OutputP2PKH(dust, hash160(pkPay)); // this dust provides a notification to the payment receiver's standard HD wallet
+        require(hash256(0x0000000000000000406a04534c500001010453454e4420 + tokenId + 0x08 + amtPay + 0x08 + amtChange + 0x08 + amtTax + p2shPay + p2shChange + p2shTax + dustPay) == tx.hashOutputs);
 
-        # check p2pkh
-        require(hash160(pubkey) == pkh)
-        checkSig(s, pk)
+        // check p2pkh
+        require(hash160(pk) == pkh);
+        require(checkSig(s, pk));
+    }
+
+    // *******************************************************
+    // Revoke Signature
+    // *******************************************************
+    //
+    // This method allows the CBDC issuer to expire a 
+    // previously issued digital signature for a coin that has
+    // not yet been used by the owner.
+    //
+    // This prevents digital dollar holder from hoarding 
+    // signatures received from the CBDC.
+    //
+    // *******************************************************
+    //
+    function revokeSig(sig issuerSig) {
+        bytes output = new OutputP2SH(tx.value, hash160(tx.bytecode));
+        require(tx.hashOutputs == hash256(output));
+
+        // check sig
+        require(checkSig(issuerSig, issuerPk));
     }
 
     // *******************************************************
     // Upgrade
     // *******************************************************
     //
+    // This method allows the CBDC issuer to upgrade this
+    // contract.
     // 
     // *******************************************************
     //
-    function upgrade() {
-
-    }
-
-    // *******************************************************
-    // Burn
-    // *******************************************************
-    //
-    // This provides the dollar owner the ability to destroy
-    // the token associated with this coin without the approval
-    // from the issuer.  This function may prove useful in
-    // situations where the issuer has lost its ability to
-    // authorize sends 
-    //
-    // A dust payment is sent to the issuer as a notification
-    // of burning.  This will allow the issuer to replace the
-    // burned coins in an automated way.
-    //
-    // *******************************************************
-    //
-    function burn() {
-
-    }
+    //function upgrade() {
+        // TODO
+    //}
 }
