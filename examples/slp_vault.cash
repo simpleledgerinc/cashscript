@@ -1,7 +1,29 @@
+// Copyright (C) 2020 Simple Ledger, Inc.
+//
+// Permission is hereby granted, free of charge, to any person
+// obtaining a copy of this software and associated documentation files
+// (the "Software"), to deal in the Software without restriction,
+// including without limitation the rights to use, copy, modify, merge,
+// publish, distribute, sublicense, and/or sell copies of the Software,
+// and to permit persons to whom the Software is furnished to do so,
+// subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be
+// included in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+// BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+// ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+// CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 pragma cashscript 0.5.3;
 
-// SlpVault 1.0
-// -----
+// ****************************************************************************************************
+// SlpVault 0.1
+// ****************************************************************************************************
 // 
 // The purpose of this contract is to avoid accidentally burning of SLP tokens when 
 // sending tokens to p2pkh addresses belonging to users who are not using an SLP compatible
@@ -34,21 +56,33 @@ pragma cashscript 0.5.3;
 // "DO NOT COMPILE, SEE COMMENTS ABOVE" within the script contract to prevent users from using this file
 // directly in cashscript SDK workflows.
 //
+// Contract Methods include:
+//      - sweep(bytes outputs, pubkey pk, sig s)
+//            Allows the vault owner (i.e., the pkh owner) can sweep the coin to his wallet
+//      - revoke(bytes outputs, bytes prevTxn0, bytes prevTxn1_pk, bytes prevTxn2, sig s)
+//            Allows the sender can take back the coin back to themselves
+//
+// Constructor Inputs include:
+//      - pkh: the intended owner and recipient for any coins sent
+//
+// ****************************************************************************************************
+//
 contract SlpVault(bytes20 pkh) {
+
+    // ******************************************************************
     // Sweep
-    // -----
-    // Spend funds from slp vault
+    // ******************************************************************
     //
-    // outputs  - transaction hashOutputs preimage
+    // Sweep funds from slp vault to an address controlled by pkh owner
     //
-    // pubkey   - the pubkey of the pkh for this vault
+    // Parameters:
+    //      - outputs    : transaction hashOutputs preimage
+    //      - pubkey     : the pubkey of the pkh for this vault
+    //      - sig        : a signature from above pubkey for this txn
     //
-    // sig      - a signature from above pubkey for this txn
+    // ******************************************************************
     //
     function sweep(bytes outputs, pubkey pk, sig s) {
-DO NOT COMPILE, SEE COMMENTS ABOVE
-
-        require(tx.hashOutputs == hash256(outputs));
 
         // check if input value is 546 satoshis, indicating possible SLP, require some op_return
         if (int(tx.value.split(4)[0]) <= 546) {
@@ -64,19 +98,24 @@ DO NOT COMPILE, SEE COMMENTS ABOVE
         require(checkSig(s, pk));
     }
 
+    // ******************************************************************
     // Revoke 
-    // -----
-    // retrieves a coin at any time before the slp vault owner sweeps the coin
+    // ******************************************************************
     //
-    // outputs      - transaction hashOutputs preimage
+    // Revoke a coin at any time before the slp vault owner sweeps 
+    // the coin
     //
-    // prevTxn0     - the front part of previous transaction
-    //
-    // prevTxn1_pk  - the public key, middle part of the previous transaction's signatures
-    //
-    // prevTxn2     - the back part of the previous transaction
-    //
-    // sig          - a signature from above pubkey needed for spending this coin
+    // WARNING: This won't work if prevTxn is larger than 520 bytes!
+    // 
+    // Parameters:
+    //      - outputs     : transaction hashOutputs preimage
+    //      - prevTxn0    : the front part of previous transaction
+    //      - prevTxn1_pk : the public key, middle part of the previous 
+    //                      transaction's signatures
+    //      - prevTxn2    : the back part of the previous transaction
+    //      - sig         : a signature from above pubkey needed for
+    //                      spending this coin
+    // ******************************************************************
     //
     function revoke(bytes outputs, bytes prevTxn0, bytes prevTxn1_pk, bytes prevTxn2, sig s) {
 
