@@ -41,28 +41,31 @@ pragma cashscript 0.5.3;
 //      - freeze(): allows CBDC issuer to freeze or unfreeze a coin
 //
 // Constructor Inputs include:
-//      - isFrozen: a state variable indicating the freeze status for a coin (1 byte)
-//      - slpAmt: a state variable holding the slp amount (8 bytes)
-//      - pkh: a 20-byte state variable representing the current coin owner's public key hash
-//      - issuerPk: the CBDC issuer's public key used for freeze/unfreeze (research tree signatures)
 //      - tokenId: the token id for the issuer's token
+//      - issuerPk: the CBDC issuer's public key used for freeze/unfreeze (research tree signatures)
+//      - pkh: a 20-byte state variable representing the current coin owner's public key hash
+//      - slpAmt: a state variable holding the slp amount (8 bytes)
+//      - isFrozen: a state variable indicating the freeze status for a coin (1 byte)
 //
 // ****************************************************************************************************
 //
-contract SlpDollar(bytes isFrozen, bytes8 slpAmt, bytes20 pkh, pubkey issuerPk, bytes32 tokenId) {
+contract SlpDollar(bytes32 tokenId, pubkey issuerPk, bytes20 pkh, bytes8 slpAmt, bytes isFrozen) {
 
     // ******************************************************************
     // Send
     // ******************************************************************
     //
-    // Send coin
+    // Send coin in a transaction in a payment with change sent back
+    // to pkh owner.  A notification is included to the payment
+    // receiver's p2pkh wallet.
     //
-    //  - payAmt: Payment digital dollar amount for txn output 1
-    //  - payPk: Payment public key for txn output 1
-    //  - changeAmt: Change digital dollar amount sent back to pkh
-    //  - changeOutput: Any p2pkh output to facilitate blockchain fees
-    //  - pk: the pubkey of the pkh for this coin
-    //  - s: a signature from above pubkey for this coin
+    // Method parameters:
+    //      - payAmt: Payment digital dollar amount for txn output 1
+    //      - payPk: Payment public key for txn output 1
+    //      - changeAmt: Change digital dollar amount sent back to pkh
+    //      - changeOutput: Any p2pkh output to facilitate blockchain fees
+    //      - pk: the pubkey of the pkh for this coin
+    //      - s: a signature from above pubkey for this coin
     //
     // ******************************************************************
     //
@@ -92,11 +95,13 @@ contract SlpDollar(bytes isFrozen, bytes8 slpAmt, bytes20 pkh, pubkey issuerPk, 
     // Freeze/Unfreeze
     // ******************************************************************
     //
-    // Freeze or unfreeze coin
+    // Freeze or unfreeze coin for the pkh owner, with a notification
+    // sent to the pkh owner's p2pkh wallet.
     //
-    //  - newFreezeState: either 0x01 (freeze) or 0x00 (unfreeze)
-    //  - changeOutput: Any p2pkh output to facilitate blockchain fees
-    //  - issuerSig: CBDC issuer's txn signature
+    // Method parameters:
+    //      - newFreezeState: either 0x01 (freeze) or 0x00 (unfreeze)
+    //      - changeOutput: Any p2pkh output to facilitate blockchain fees
+    //      - issuerSig: CBDC issuer's txn signature
     //
     // ******************************************************************
     //
@@ -109,13 +114,13 @@ contract SlpDollar(bytes isFrozen, bytes8 slpAmt, bytes20 pkh, pubkey issuerPk, 
             require(isFrozen == 0x01);
         }
         bytes bytecode = 0x01 + newFreezeState + tx.bytecode.split(2)[1];
-        bytes8 dust = 0x2202000000000000;
-        bytes out = new OutputP2SH(dust, hash160(bytecode));
-        bytes dustNotification = new OutputP2PKH(dust, pkh);
+
+        bytes slpOut = new OutputP2SH(0x2202000000000000, hash160(bytecode));
+        bytes ownerNotifier = new OutputP2PKH(tx.value, pkh);
 
         // check slp message to prevent burning
         bytes slpMsg = 0x0000000000000000376a04534c500001010453454e4420 + tokenId + 0x08 + slpAmt;
-        require(tx.hashOutputs == hash256(slpMsg + out + dustNotification + changeOutput));
+        require(tx.hashOutputs == hash256(slpMsg + slpOut + ownerNotifier + changeOutput));
 
         // check issuer's sig
         require(checkSig(issuerSig, issuerPk));
