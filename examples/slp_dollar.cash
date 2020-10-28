@@ -72,7 +72,7 @@ contract SlpDollar(bytes32 tokenId, pubkey issuerPk, bytes20 pkh, bytes8 slpAmt,
     function send(bytes8 payAmt, pubkey payPk, bytes8 changeAmt, bytes changeOutput, pubkey pk, sig s) {
 
         // verify coin is not frozen
-        require(isFrozen != 0x0101);
+        require(isFrozen != 0x01);
 
         // check output format requirements (payment receiver + change address + tax payment receiver + dust tag for notification to payment receiver's p2pkh wallet)
         require(payAmt.length == 8);
