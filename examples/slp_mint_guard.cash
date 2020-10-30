@@ -39,52 +39,12 @@ pragma cashscript 0.5.3;
 // Constructor Inputs include:
 //      - scriptBaseSha256: the sha256 of the base script required to be enforced 
 //      - slpMintFront: the front part of the mint op_return message, less token id and amount
-//      - tokenId:
+//      - tokenId: the token's ID
 //      - pkh: the intended owner and recipient for any coins sent
-//      - isLocked:
 //
 // ****************************************************************************************************
 //
-contract SlpMintGuard(bytes32 scriptBaseSha256, bytes23 slpMintFront, bytes32 tokenId, bytes20 pkh, bool isLocked) {
-
-    // ******************************************************************
-    // LockUnlock 
-    // ******************************************************************
-    //
-    // Lock or unlock the ability to exit "exit()"
-    // 
-    // Parameters:
-    //      - newLockState  : new lock state (enable/disable) ability to
-    //                        use "mint()" or "exit()"
-    //      - changeOutput  : output for bch change
-    //      - scriptBase    : script base to be used for receiver
-    //      - pubkey        : the pubkey of the pkh for this vault
-    //      - s             : a signature from above pubkey needed for
-    //                        spending this coin
-    // ******************************************************************
-    //
-    function lockUnlock(bytes1 newLockState, bytes changeOutput, bytes scriptBase, pubkey pk, sig s) {
-
-        // update byte code to frozen or unfrozen
-        if (newLockState == 0x00) {
-            require(isLocked == true);
-        } else {
-            require(isLocked == false);
-        }
-
-        // slp mint message 
-        bytes slpMsg = slpMintFront + tokenId + 0x08 + 0x0000000000000000;
-        bytes batonOut = new OutputP2SH(0x2202000000000000, hash160(newLockState + 0x14 + pkh + 0x20 + tokenId + 0x17 + slpMintFront + 0x20 + scriptBaseSha256 + scriptBase));
-        require(tx.hashOutputs == hash256(slpMsg + batonOut + changeOutput));
-
-        // require script base hash
-        require(sha256(scriptBase) == scriptBaseSha256);
-        // manually place OP_CODESEPARATOR here
-
-        // check for the p2pkh owner
-        require(hash160(pk) == pkh);
-        require(checkSig(s, pk));
-    }
+contract SlpMintGuard(bytes32 scriptBaseSha256, bytes23 slpMintFront, bytes32 tokenId, bytes20 pkh) {
 
     // ******************************************************************
     // Transfer 
@@ -93,27 +53,24 @@ contract SlpMintGuard(bytes32 scriptBaseSha256, bytes23 slpMintFront, bytes32 to
     // Transfer the Mint Vault to a new address.
     // 
     // Parameters:
-    //      - newPk          : public key for new owner
-    //      - changeOutput   : output for bch change
-    //      - scriptBase     : script base to be used for receiver
-    //      - pubkey         : the pubkey of the pkh for this vault
-    //      - s              : a signature from above pubkey needed for
-    //                         spending this coin
+    //      - newPk            : public key for new owner
+    //      - tokenReceiverOut : the output for the token receiver
+    //      - changeOutput     : output for bch change
+    //      - scriptBase       : script base to be used for receiver
+    //      - pubkey           : the pubkey of the pkh for this vault
+    //      - s                : a signature from above pubkey needed for
+    //                           spending this coin
     // ******************************************************************
     //
-    function Transfer(pubkey newPk, bytes changeOutput, bytes scriptBase, pubkey pk, sig s) {
-
-        // check contract state
-        require(isLocked == false);
+    function Transfer(pubkey newPk, bytes tokenReceiverOut, bytes changeOutput, bytes scriptBase, pubkey pk, sig s) {
 
         // check pubkey length is correct
         require(newPk.length == 33);
 
         // slp mint message 
-        bytes slpMsg = slpMintFront + tokenId + 0x08 + 0x0000000000000000;
-        bytes dust = 0x2202000000000000;
-        bytes batonOut = new OutputP2SH(dust, hash160(0x00 + 0x14 + hash160(newPk) + 0x20 + tokenId + 0x17 + slpMintFront + 0x20 + scriptBaseSha256 + scriptBase));
-        require(tx.hashOutputs == hash256(slpMsg + dust + batonOut + changeOutput));
+        bytes slpMsg = slpMintFront + tokenId + 0x010208 + 0x0000000000000000;
+        bytes batonOut = new OutputP2SH(0x2202000000000000, hash160(0x14 + hash160(newPk) + 0x20 + tokenId + 0x17 + slpMintFront + 0x20 + scriptBaseSha256 + scriptBase));
+        require(tx.hashOutputs == hash256(slpMsg + tokenReceiverOut + batonOut + changeOutput));
 
         // require script base hash
         require(sha256(scriptBase) == scriptBaseSha256);
@@ -131,22 +88,20 @@ contract SlpMintGuard(bytes32 scriptBaseSha256, bytes23 slpMintFront, bytes32 to
     // Mint more tokens
     //
     // Parameters:
-    //      - slpAmt        : the amount to be minted
-    //      - changeOutput  : the final output used for change
-    //      - scriptBase    : script base to be used for receiver
-    //      - pubkey        : the pubkey of the pkh for this vault
-    //      - sig           : a signature from above pubkey for this txn
+    //      - slpAmt           : the amount to be minted
+    //      - tokenReceiverOut : the output for the token receiver
+    //      - changeOutput     : the final output used for change
+    //      - scriptBase       : script base to be used for receiver
+    //      - pubkey           : the pubkey of the pkh for this vault
+    //      - sig              : a signature from above pubkey for this txn
     //
     // ******************************************************************
     //
     function mint(bytes8 slpAmt, bytes tokenReceiverOut, bytes changeOutput, bytes scriptBase, pubkey pk, sig s) {
  
-        // check contract state
-        require(isLocked == true);
-
         // slp mint message 
-        bytes slpMsg = slpMintFront + tokenId + 0x08 + slpAmt;
-        bytes batonOut = new OutputP2SH(0x2202000000000000, hash160(0x51 + 0x14 + pkh + 0x20 + tokenId + 0x17 + slpMintFront + 0x20 + scriptBaseSha256 + scriptBase));
+        bytes slpMsg = slpMintFront + tokenId + 0x010208 + slpAmt;
+        bytes batonOut = new OutputP2SH(0x2202000000000000, hash160(0x14 + pkh + 0x20 + tokenId + 0x17 + slpMintFront + 0x20 + scriptBaseSha256 + scriptBase));
         require(tx.hashOutputs == hash256(slpMsg + tokenReceiverOut + batonOut + changeOutput));
 
         // require script base hash
