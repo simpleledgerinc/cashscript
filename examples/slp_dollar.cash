@@ -27,7 +27,7 @@ pragma cashscript 0.5.3;
 // 
 // This contract demonstrates how to implement a digital dollar using the Simple Ledger Protocol (SLP).
 // Extremely low transaction fees and fast confirmation times make SLP an effective and efficient
-// platform for building a Central Bank Digital Currency (CBDC).
+// platform for building a globally accessible Central Bank Digital Currency (CBDC).
 //
 // CBDC issuers are provided the ability to freeze or unfreeze a user's coins, at will, using the 
 // "freeze" contract method.
@@ -37,19 +37,21 @@ pragma cashscript 0.5.3;
 // amount (i.e., "payNotifier") to serve as a notification about the newly received dollar.
 //
 // Contract Methods include:
-//      - send(): allows the digital dollar owner to spend,
-//      - freeze(): allows CBDC issuer to freeze or unfreeze a coin
+//      - Send()   : allows the digital dollar owner to spend,
+//      - Freeze() : allows CBDC issuer to freeze or unfreeze a coin
 //
 // Constructor Inputs include:
-//      - tokenId: the token id for the issuer's token
-//      - issuerPk: the CBDC issuer's public key used for freeze/unfreeze (research tree signatures)
-//      - pkh: a 20-byte state variable representing the current coin owner's public key hash
-//      - slpAmt: a state variable holding the slp amount (8 bytes)
-//      - isFrozen: a state variable indicating the freeze status for a coin (1 byte)
+//      - scriptBaseSha256 : the sha256 of the base script required to be enforced
+//      - slpSendFront     : the front of the required send op_return message, less amount
+//      - issuerPk         : the CBDC issuer's public key used for freeze/unfreeze
+//      - pkh              : a 20-byte state variable representing the current coin owner's public key
+//                           hash
+//      - isFrozen         : a state variable indicating the freeze status for a coin (2 bytes is used
+//                           to avoid typing issues associated with minimal push requirements)
 //
 // ****************************************************************************************************
 //
-contract SlpDollar(bytes32 tokenId, pubkey issuerPk, bytes20 pkh, bytes8 slpAmt, bytes isFrozen) {
+contract SlpDollar(bytes32 scriptBaseSha256, bytes56 slpSendFront, pubkey issuerPk, bytes20 pkh, bytes2 isFrozen) {
 
     // ******************************************************************
     // Send
@@ -60,31 +62,44 @@ contract SlpDollar(bytes32 tokenId, pubkey issuerPk, bytes20 pkh, bytes8 slpAmt,
     // receiver's p2pkh wallet.
     //
     // Method parameters:
-    //      - payAmt: Payment digital dollar amount for txn output 1
-    //      - payPk: Payment public key for txn output 1
-    //      - changeAmt: Change digital dollar amount sent back to pkh
-    //      - changeOutput: Any p2pkh output to facilitate blockchain fees
-    //      - pk: the pubkey of the pkh for this coin
-    //      - s: a signature from above pubkey for this coin
+    //      - payAmt       : payment digital dollar amount for txn output 1
+    //      - payPk        : payment public key for txn output 1
+    //      - changeAmt    : change digital dollar amount sent back to pkh
+    //      - changeOutput : any p2pkh output to facilitate blockchain fees
+    //      - scriptBase   : 
+    //      - pk           : the pubkey of the pkh for this coin
+    //      - s            : a signature from above pubkey for this coin
     //
     // ******************************************************************
     //
-    function send(bytes8 payAmt, pubkey payPk, bytes8 changeAmt, bytes changeOutput, pubkey pk, sig s) {
+    function Send(bytes8 payAmt, pubkey payPk, bytes8 changeAmt, bytes changeOutput, bytes scriptBase, pubkey pk, sig s) {
 
         // verify coin is not frozen
-        require(isFrozen != 0x01);
+        require(isFrozen == 0x0000);
 
-        // check output format requirements (payment receiver + change address + tax payment receiver + dust tag for notification to payment receiver's p2pkh wallet)
+        // check scriptSig variable lengths
         require(payAmt.length == 8);
         require(payPk.length == 33);
         require(changeAmt.length == 8);
-        bytes slpMsg = 0x0000000000000000406a04534c500001010453454e4420 + tokenId + 0x08 + payAmt + 0x08 + changeAmt;
-        bytes code = tx.bytecode.split(32)[1];  // get slice after "isFrozen" (2), "slpAmt" (9), and receiver "pkh" (21)
+
+        // create outputs
+        bytes code = 0x02 + isFrozen + 0x14 + pkh + 0x21 + bytes(issuerPk) + 0x38 + slpSendFront + 0x20 + scriptBaseSha256 + scriptBase;
         bytes8 dust = 0x2202000000000000;
-        bytes p2shPay = new OutputP2SH(dust, hash160(0x01 + isFrozen + 0x08 + payAmt + 0x14 + hash160(payPk) + code));
-        bytes p2shChange = new OutputP2SH(dust, hash160(0x01 + isFrozen + 0x08 + changeAmt + 0x14 + pkh + code));
+        bytes p2shPay = new OutputP2SH(dust, hash160(code));
+        bytes p2shChange = new OutputP2SH(dust, hash160(code));
         bytes payNotifier = new OutputP2PKH(dust, hash160(payPk)); // this dust provides a notification to the payment receiver's standard HD wallet
-        require(hash256(slpMsg + p2shPay + p2shChange + payNotifier + changeOutput) == tx.hashOutputs);
+
+        // check output format
+        bytes baseOuts = slpSendFront +  payAmt + 0x08 + changeAmt + p2shPay + p2shChange + payNotifier;
+        if (changeOutput != 0x00000000) {
+            require(hash256(baseOuts + changeOutput) == tx.hashOutputs);
+        } else {
+            require(hash256(baseOuts) == tx.hashOutputs);
+        }
+
+        // require script base hash
+        require(sha256(scriptBase) == scriptBaseSha256);
+        // manually place OP_CODESEPARATOR here
 
         // check p2pkh
         require(hash160(pk) == pkh);
@@ -99,28 +114,39 @@ contract SlpDollar(bytes32 tokenId, pubkey issuerPk, bytes20 pkh, bytes8 slpAmt,
     // sent to the pkh owner's p2pkh wallet.
     //
     // Method parameters:
-    //      - newFreezeState: either 0x01 (freeze) or 0x00 (unfreeze)
-    //      - changeOutput: Any p2pkh output to facilitate blockchain fees
-    //      - issuerSig: CBDC issuer's txn signature
+    //      - newFreezeState : either 0x01 (freeze) or 0x00 (unfreeze)
+    //      - changeOutput   : any p2pkh output to facilitate blockchain fees
+    //      - scriptBase     : script base to be used for receiver to
+    //                         match scriptBaseSha256
+    //      - issuerSig      : issuer's txn signature
     //
     // ******************************************************************
     //
-    function freeze(bytes newFreezeState, bytes changeOutput, sig issuerSig) {
+    function Freeze(bytes2 newFreezeState, bytes8 slpAmt, bytes changeOutput, bytes scriptBase, sig issuerSig) {
 
         // update byte code to frozen or unfrozen
-        if (newFreezeState == 0x01) {
-            require(isFrozen == 0x00);
-        } else if (newFreezeState == 0x00) {
-            require(isFrozen == 0x01);
+        if (newFreezeState == 0x0001) {
+            require(isFrozen == 0x0000);
+        } else {
+            require(isFrozen == 0x0001);
+            require(newFreezeState == 0x0000);
         }
-        bytes bytecode = 0x01 + newFreezeState + tx.bytecode.split(2)[1];
 
-        bytes slpOut = new OutputP2SH(0x2202000000000000, hash160(bytecode));
+        // create outputs
+        bytes slpOut = new OutputP2SH(0x2202000000000000, hash160(0x02 + isFrozen + 0x14 + pkh + 0x21 + bytes(issuerPk) + 0x38 + slpSendFront + 0x20 + scriptBaseSha256 + scriptBase));
         bytes ownerNotifier = new OutputP2PKH(tx.value, pkh);
 
-        // check slp message to prevent burning
-        bytes slpMsg = 0x0000000000000000376a04534c500001010453454e4420 + tokenId + 0x08 + slpAmt;
-        require(tx.hashOutputs == hash256(slpMsg + slpOut + ownerNotifier + changeOutput));
+        // check output format
+        bytes baseOuts = slpSendFront + slpAmt + slpOut + ownerNotifier;
+        if (changeOutput != 0x00000000) {
+            require(hash256(baseOuts + changeOutput) == tx.hashOutputs);
+        } else {
+            require(hash256(baseOuts) == tx.hashOutputs);
+        }
+
+        // require script base hash
+        require(sha256(scriptBase) == scriptBaseSha256);
+        // manually place OP_CODESEPARATOR here
 
         // check issuer's sig
         require(checkSig(issuerSig, issuerPk));
